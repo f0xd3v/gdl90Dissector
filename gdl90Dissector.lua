@@ -244,6 +244,77 @@ local function dissectUavionixStatic(buffer,pinfo,subtree)
   end
 end
 
+local function dissectStratuxHeartbeat(buffer,pinfo,subtree)
+  dissectMessageID(buffer,pinfo,subtree,"Stratux Heartbeat")
+end
+
+local function dissectStratuxStatus(buffer,pinfo,subtree)
+  dissectMessageID(buffer,pinfo,subtree,"Stratux")
+  
+  if(buffer(1,2):string() == "SX" and buffer(3,1):uint() == 1) then
+	pinfo.cols.info = tostring(pinfo.cols.info) .. " Status"
+    subtree:add(buffer(1,3), "Stratux Status Message identifier (0x535801)")
+	subtree:add(buffer(4,1), "Version: " .. buffer(4,1):uint())
+	
+	local versionFlag = { [0] = ".", [1] = "b", [2] = "r", [3] = "rc" }
+	subtree:add(buffer(5,4),"Firmware version: "  .. buffer(5,1):uint() .. '.' .. buffer(6,1):uint() .. versionFlag[buffer(7,1):uint()] .. buffer(8,1):uint())
+	
+	subtree:add(buffer(9,4), "Hardware Revision Code: 0x" .. string.format("%x", buffer(9,4):uint()))
+	
+	local fixFlag = { [0] = "None", [1] = "3D", [3] = "WAAS" }
+	local validFlagsTree = subtree:add(gdl90_proto,buffer(13,2),"Valid and Enabled Flags")
+	local validFlagsValue = buffer(13,2):uint()
+	local fix = fixFlag[bit32.extract(validFlagsValue,0,2)]
+	validFlagsTree:add(buffer(13,2),"Valid: " .. fix)
+	validFlagsTree:add(buffer(13,2),"AHRS Valid: " .. bitValue(validFlagsValue,2))
+	validFlagsTree:add(buffer(13,2),"Pressure Valid: " .. bitValue(validFlagsValue,3))
+	validFlagsTree:add(buffer(13,2),"CPU Temp Valid: " .. bitValue(validFlagsValue,4))
+	validFlagsTree:add(buffer(13,2),"978 Enabled: " .. bitValue(validFlagsValue,5))
+	validFlagsTree:add(buffer(13,2),"1090 Enabled: " .. bitValue(validFlagsValue,6))
+	validFlagsTree:add(buffer(13,2),"GPS Enabled: " .. bitValue(validFlagsValue,7))
+	validFlagsTree:add(buffer(13,2),"AHRS Enabled: " .. bitValue(validFlagsValue,8))
+	validFlagsTree:add(buffer(13,2),"Reserved: " .. bit32.extract(validFlagsValue,9,6))
+	
+	local connectedHardTree = subtree:add(gdl90_proto,buffer(15,2),"Connected Hardware Flags")
+	local connectedHardValue = buffer(15,2):uint()
+	local sdrs = bit32.extract(connectedHardValue,0,2)
+	connectedHardTree:add(buffer(15,2),"Number of radios: " .. sdrs)
+	connectedHardTree:add(buffer(15,2),"RY835AI: "          .. bitValue(connectedHardValue,2))
+	connectedHardTree:add(buffer(15,2),"Reserved: "         .. bit32.extract(connectedHardValue,3,12))
+	
+	subtree:add(buffer(17,1), "Satellites Locked: "        .. buffer(17,1):uint())
+	subtree:add(buffer(18,1), "Satellites Connected: "     .. buffer(18,1):uint())
+	subtree:add(buffer(19,2), "978 Traffic Targets: "      .. buffer(19,2):uint())
+	subtree:add(buffer(21,2), "1090 Traffic Targets: "     .. buffer(21,2):uint())
+	subtree:add(buffer(23,2), "978 Messages per Minute: "  .. buffer(23,2):uint())
+	subtree:add(buffer(25,2), "1090 Messages per Minute: " .. buffer(25,2):uint())
+	subtree:add(buffer(27,2), "CPU temperature: "          .. (buffer(27,2):int() / 10) .. " °C")
+	subtree:add(buffer(29,1), "ADS-B Towers: "             .. buffer(29,1):uint())
+	
+	-- GPS
+	if(bitValue(validFlagsValue,7) and buffer(18,1):uint() > 0) then
+		pinfo.cols.info = tostring(pinfo.cols.info) .. ", " .. fix .. ", " .. buffer(18,1):uint() .. " sats"
+	end
+	
+	-- 978
+	if(bitValue(validFlagsValue,5) and buffer(23,2):uint() > 0) then
+		pinfo.cols.info = tostring(pinfo.cols.info) .. ", (978: " .. buffer(19,2):uint() .. " targets, " .. buffer(23,2):uint() .. " msg/min)"
+	end
+	
+	-- 1090
+	if(bitValue(validFlagsValue,6) and buffer(25,2):uint() > 0) then
+		pinfo.cols.info = tostring(pinfo.cols.info) .. ", (1090: " .. buffer(21,2):uint() .. " targets, " .. buffer(25,2):uint() .. " msg/min)"
+	end
+	
+	-- CPU
+	if(bitValue(validFlagsValue,4)) then
+		pinfo.cols.info = tostring(pinfo.cols.info) .. ", CPU " .. (buffer(27,2):int() / 10) .. " °C"
+	end
+		
+		
+  end
+end
+
 local function dissectUnknown(buffer,pinfo,subtree)
   dissectMessageID(buffer,pinfo,subtree,"Unknown 0x" .. string.format("%x", buffer(1,1):uint()))
 end
@@ -362,6 +433,9 @@ msgDissectFunctions[11] = dissectOwnshipGeometricAltitude
 msgDissectFunctions[20] = dissectTrafficReport
 msgDissectFunctions[30] = dissectBasicReport
 msgDissectFunctions[117] = dissectUavionixStatic
+-- added Stratux hearbeat messages
+msgDissectFunctions[204] = dissectStratuxHeartbeat
+msgDissectFunctions[83] = dissectStratuxStatus
 
 -- create a function to dissect it
 function gdl90_proto.dissector(buffer,pinfo,tree)
