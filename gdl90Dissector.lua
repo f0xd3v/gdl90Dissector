@@ -246,74 +246,147 @@ end
 
 local function dissectStratuxHeartbeat(buffer,pinfo,subtree)
   dissectMessageID(buffer,pinfo,subtree,"Stratux Heartbeat")
+
+  subtree:add(buffer(2,1), "AHRS valid: " .. bit32.extract(buffer(2,1):uint(),0,1))
+  subtree:add(buffer(2,1), "GPS valid: " .. bit32.extract(buffer(2,1):uint(),1,1))
+  subtree:add(buffer(2,1), "Protocol version: " .. bit32.extract(buffer(2,1):uint(),2,6))
 end
 
 local function dissectStratuxStatus(buffer,pinfo,subtree)
   dissectMessageID(buffer,pinfo,subtree,"Stratux")
-  
+
   if(buffer(1,2):string() == "SX" and buffer(3,1):uint() == 1) then
-	pinfo.cols.info = tostring(pinfo.cols.info) .. " Status"
+  pinfo.cols.info = tostring(pinfo.cols.info) .. " Status"
     subtree:add(buffer(1,3), "Stratux Status Message identifier (0x535801)")
-	subtree:add(buffer(4,1), "Version: " .. buffer(4,1):uint())
-	
-	local versionFlag = { [0] = ".", [1] = "b", [2] = "r", [3] = "rc" }
-	subtree:add(buffer(5,4),"Firmware version: "  .. buffer(5,1):uint() .. '.' .. buffer(6,1):uint() .. versionFlag[buffer(7,1):uint()] .. buffer(8,1):uint())
-	
-	subtree:add(buffer(9,4), "Hardware Revision Code: 0x" .. string.format("%x", buffer(9,4):uint()))
-	
-	local fixFlag = { [0] = "None", [1] = "3D", [3] = "WAAS" }
-	local validFlagsTree = subtree:add(gdl90_proto,buffer(13,2),"Valid and Enabled Flags")
-	local validFlagsValue = buffer(13,2):uint()
-	local fix = fixFlag[bit32.extract(validFlagsValue,0,2)]
-	validFlagsTree:add(buffer(13,2),"Valid: " .. fix)
-	validFlagsTree:add(buffer(13,2),"AHRS Valid: " .. bitValue(validFlagsValue,2))
-	validFlagsTree:add(buffer(13,2),"Pressure Valid: " .. bitValue(validFlagsValue,3))
-	validFlagsTree:add(buffer(13,2),"CPU Temp Valid: " .. bitValue(validFlagsValue,4))
-	validFlagsTree:add(buffer(13,2),"978 Enabled: " .. bitValue(validFlagsValue,5))
-	validFlagsTree:add(buffer(13,2),"1090 Enabled: " .. bitValue(validFlagsValue,6))
-	validFlagsTree:add(buffer(13,2),"GPS Enabled: " .. bitValue(validFlagsValue,7))
-	validFlagsTree:add(buffer(13,2),"AHRS Enabled: " .. bitValue(validFlagsValue,8))
-	validFlagsTree:add(buffer(13,2),"Reserved: " .. bit32.extract(validFlagsValue,9,6))
-	
-	local connectedHardTree = subtree:add(gdl90_proto,buffer(15,2),"Connected Hardware Flags")
-	local connectedHardValue = buffer(15,2):uint()
-	local sdrs = bit32.extract(connectedHardValue,0,2)
-	connectedHardTree:add(buffer(15,2),"Number of radios: " .. sdrs)
-	connectedHardTree:add(buffer(15,2),"RY835AI: "          .. bitValue(connectedHardValue,2))
-	connectedHardTree:add(buffer(15,2),"Reserved: "         .. bit32.extract(connectedHardValue,3,12))
-	
-	subtree:add(buffer(17,1), "Satellites Locked: "        .. buffer(17,1):uint())
-	subtree:add(buffer(18,1), "Satellites Connected: "     .. buffer(18,1):uint())
-	subtree:add(buffer(19,2), "978 Traffic Targets: "      .. buffer(19,2):uint())
-	subtree:add(buffer(21,2), "1090 Traffic Targets: "     .. buffer(21,2):uint())
-	subtree:add(buffer(23,2), "978 Messages per Minute: "  .. buffer(23,2):uint())
-	subtree:add(buffer(25,2), "1090 Messages per Minute: " .. buffer(25,2):uint())
-	subtree:add(buffer(27,2), "CPU temperature: "          .. (buffer(27,2):int() / 10) .. " °C")
-	subtree:add(buffer(29,1), "ADS-B Towers: "             .. buffer(29,1):uint())
-	
-	-- GPS
-	if(bitValue(validFlagsValue,7) and buffer(18,1):uint() > 0) then
-		pinfo.cols.info = tostring(pinfo.cols.info) .. ", " .. fix .. ", " .. buffer(18,1):uint() .. " sats"
-	end
-	
-	-- 978
-	if(bitValue(validFlagsValue,5) and buffer(23,2):uint() > 0) then
-		pinfo.cols.info = tostring(pinfo.cols.info) .. ", (978: " .. buffer(19,2):uint() .. " targets, " .. buffer(23,2):uint() .. " msg/min)"
-	end
-	
-	-- 1090
-	if(bitValue(validFlagsValue,6) and buffer(25,2):uint() > 0) then
-		pinfo.cols.info = tostring(pinfo.cols.info) .. ", (1090: " .. buffer(21,2):uint() .. " targets, " .. buffer(25,2):uint() .. " msg/min)"
-	end
-	
-	-- CPU
-	if(bitValue(validFlagsValue,4)) then
-		pinfo.cols.info = tostring(pinfo.cols.info) .. ", CPU " .. (buffer(27,2):int() / 10) .. " °C"
-	end
-		
-		
+  subtree:add(buffer(4,1), "Version: " .. buffer(4,1):uint())
+
+  local versionFlag = { [0] = ".", [1] = "b", [2] = "r", [3] = "rc" }
+  subtree:add(buffer(5,4),"Firmware version: "  .. buffer(5,1):uint() .. '.' .. buffer(6,1):uint() .. versionFlag[buffer(7,1):uint()] .. buffer(8,1):uint())
+
+  subtree:add(buffer(9,4), "Hardware Revision Code: 0x" .. string.format("%x", buffer(9,4):uint()))
+
+  local fixFlag = { [0] = "None", [1] = "3D", [3] = "DGPS" }
+  local validFlagsTree = subtree:add(gdl90_proto,buffer(13,2),"Valid and Enabled Flags")
+  local validFlagsValue = buffer(13,2):uint()
+  local fix = fixFlag[bit32.extract(validFlagsValue,0,2)]
+  validFlagsTree:add(buffer(13,2),"Fix quality: " .. fix)
+  validFlagsTree:add(buffer(13,2),"AHRS Valid: " .. bitValue(validFlagsValue,2))
+  validFlagsTree:add(buffer(13,2),"Pressure Valid: " .. bitValue(validFlagsValue,3))
+  validFlagsTree:add(buffer(13,2),"CPU Temp Valid: " .. bitValue(validFlagsValue,4))
+  validFlagsTree:add(buffer(13,2),"978 Enabled: " .. bitValue(validFlagsValue,5))
+  validFlagsTree:add(buffer(13,2),"1090 Enabled: " .. bitValue(validFlagsValue,6))
+  validFlagsTree:add(buffer(13,2),"GPS Enabled: " .. bitValue(validFlagsValue,7))
+  validFlagsTree:add(buffer(13,2),"AHRS Enabled: " .. bitValue(validFlagsValue,8))
+  validFlagsTree:add(buffer(13,2),"Reserved: " .. bit32.extract(validFlagsValue,9,6))
+
+  local connectedHardTree = subtree:add(gdl90_proto,buffer(15,2),"Connected Hardware Flags")
+  local connectedHardValue = buffer(15,2):uint()
+  local sdrs = bit32.extract(connectedHardValue,0,2)
+  connectedHardTree:add(buffer(15,2),"Number of radios: " .. sdrs)
+  connectedHardTree:add(buffer(15,2),"IMU: "              .. bitValue(connectedHardValue,2))
+  connectedHardTree:add(buffer(15,2),"Reserved: "         .. bit32.extract(connectedHardValue,3,12))
+
+  subtree:add(buffer(17,1), "Satellites locked: "          .. buffer(17,1):uint())
+  subtree:add(buffer(18,1), "Satellites connected: "       .. buffer(18,1):uint())
+  subtree:add(buffer(19,2), "UAT traffic targets: "        .. buffer(19,2):uint())
+  subtree:add(buffer(21,2), "1090ES traffic targets: "     .. buffer(21,2):uint())
+  subtree:add(buffer(23,2), "UAT messages per minute: "    .. buffer(23,2):uint())
+  subtree:add(buffer(25,2), "1090ES messages per minute: " .. buffer(25,2):uint())
+  subtree:add(buffer(27,2), "CPU temperature: "            ..(buffer(27,2):int() / 10) .. " °C")
+  subtree:add(buffer(29,1), "ADS-B towers: "               .. buffer(29,1):uint())
+
+  -- GPS
+  if(bitValue(validFlagsValue,7) and buffer(18,1):uint() > 0) then
+    pinfo.cols.info = tostring(pinfo.cols.info) .. ", " .. fix .. ", " .. buffer(18,1):uint() .. " sats"
+  end
+
+  -- 978
+  if(bitValue(validFlagsValue,5) and buffer(23,2):uint() > 0) then
+    pinfo.cols.info = tostring(pinfo.cols.info) .. ", (978: " .. buffer(19,2):uint() .. " targets, " .. buffer(23,2):uint() .. " msg/min)"
+  end
+
+  -- 1090
+  if(bitValue(validFlagsValue,6) and buffer(25,2):uint() > 0) then
+    pinfo.cols.info = tostring(pinfo.cols.info) .. ", (1090: " .. buffer(21,2):uint() .. " targets, " .. buffer(25,2):uint() .. " msg/min)"
+  end
+
+  -- CPU
+  if(bitValue(validFlagsValue,4)) then
+    pinfo.cols.info = tostring(pinfo.cols.info) .. ", CPU " .. (buffer(27,2):int() / 10) .. " °C"
+  end
   end
 end
+
+local function dissectForeFlight(buffer,pinfo,subtree)
+  dissectMessageID(buffer,pinfo,subtree,"ForeFlight")
+
+  local subId = buffer(2,1):uint()
+  if(subId == 0x0) then
+  pinfo.cols.info = tostring(pinfo.cols.info) .. " ID"
+
+  subtree:add(buffer(3,1), "Version: "                .. buffer(3,1):uint())
+  subtree:add(buffer(4,8), "Device serial number: 0x" .. string.format("%x", buffer(4,4):uint()) .. string.format("%x", buffer(8,4):uint()))
+  subtree:add(buffer(12,8), "Device name: "           .. buffer(12,8):string())
+  subtree:add(buffer(20,16), "Device long name: "     .. buffer(20,16):string())
+
+  local capaTree = subtree:add(gdl90_proto,buffer(36,4),"Capabilities mask")
+  local datum = { [0] = "WGS-84 ellipsoid", [1] = "MSL"}
+  capaTree:add(buffer(36,4),"Geometric altitude datum: " .. datum[bit32.extract(buffer(36,4):uint(),0,1)])
+  capaTree:add(buffer(36,4),"Reserved: " .. bit32.extract(buffer(36,4):uint(),1,31))
+
+    else if(subId == 0x1) then
+      pinfo.cols.info = tostring(pinfo.cols.info) .. " AHRS"
+
+      local roll = buffer(3,2):int()
+      if(roll < -1800 or roll > 1800) then
+        subtree:add(buffer(3,2), "Roll: outside of the range [-1800, 1800]")
+      elseif(roll == 0x7ff) then
+        subtree:add(buffer(3,2), "Roll: invalid")
+				pinfo.cols.info = tostring(pinfo.cols.info) .. ", Roll invalid"
+      else
+        subtree:add(buffer(3,2), "Roll: " .. roll / 10 .. "°")
+      end
+      
+      local pitch = buffer(5,2):int()
+      if(pitch < -1800 or pitch > 1800) then
+        subtree:add(buffer(5,2), "Pitch: outside of the range [-1800, 1800]")
+      elseif(pitch == 0x7ff) then
+        subtree:add(buffer(5,2), "Pitch: invalid")
+				pinfo.cols.info = tostring(pinfo.cols.info) .. ", Pitch invalid"
+      else
+        subtree:add(buffer(5,2), "Pitch: " .. pitch / 10 .. "°")
+      end
+      
+      local hdg = buffer(7,2):uint()
+      if(hdg == 0xffff) then
+        subtree:add(buffer(7,2), "Heading: invalid (0x" .. string.format("%x", hdg) .. ")")
+				pinfo.cols.info = tostring(pinfo.cols.info) .. ", HDG invalid"
+      else
+        local hdgMSB = { [0] = "True", [1] = "Magnetic" }
+        subtree:add(buffer(7,2), "Heading: " .. bit32.extract(hdg,0,15) / 10 .. "° " .. hdgMSB[bitValue(hdg,15)])
+      end
+      
+      local ias = buffer(9,2):uint()
+      if(ias == 0xffff) then
+        subtree:add(buffer(9,2), "Indicated airspeed: invalid (0x" .. string.format("%x", ias) .. ")")
+				pinfo.cols.info = tostring(pinfo.cols.info) .. ", IAS invalid"
+      else
+        subtree:add(buffer(9,2), "Indicated airspeed: " .. ias .. "knots")
+      end
+      
+      local tas = buffer(11,2):uint()
+      if(tas == 0xffff) then
+        subtree:add(buffer(11,2), "True airspeed: invalid (0x" .. string.format("%x", tas) .. ")")
+				pinfo.cols.info = tostring(pinfo.cols.info) .. ", TAS invalid"
+      else
+        subtree:add(buffer(11,2), "True airspeed: " .. tas .. "knots")
+      end
+      
+      
+    end
+  end
+end
+
 
 local function dissectUnknown(buffer,pinfo,subtree)
   dissectMessageID(buffer,pinfo,subtree,"Unknown 0x" .. string.format("%x", buffer(1,1):uint()))
@@ -424,18 +497,20 @@ end
 
 -- Map Message ID values to methods to dissect particular type of message
 msgDissectFunctions = {}
-msgDissectFunctions[0]  = dissectHeartbeat
-msgDissectFunctions[2]  = dissectInitialization
-msgDissectFunctions[7]  = dissectUplinkData
-msgDissectFunctions[9]  = dissectHeightAboveTerrain
-msgDissectFunctions[10] = dissectOwnshipReport
-msgDissectFunctions[11] = dissectOwnshipGeometricAltitude
-msgDissectFunctions[20] = dissectTrafficReport
-msgDissectFunctions[30] = dissectBasicReport
+msgDissectFunctions[0]   = dissectHeartbeat
+msgDissectFunctions[2]   = dissectInitialization
+msgDissectFunctions[7]   = dissectUplinkData
+msgDissectFunctions[9]   = dissectHeightAboveTerrain
+msgDissectFunctions[10]  = dissectOwnshipReport
+msgDissectFunctions[11]  = dissectOwnshipGeometricAltitude
+msgDissectFunctions[20]  = dissectTrafficReport
+msgDissectFunctions[30]  = dissectBasicReport
 msgDissectFunctions[117] = dissectUavionixStatic
 -- added Stratux hearbeat messages
+msgDissectFunctions[83]  = dissectStratuxStatus
 msgDissectFunctions[204] = dissectStratuxHeartbeat
-msgDissectFunctions[83] = dissectStratuxStatus
+-- added Foreflight messages
+msgDissectFunctions[101] = dissectForeFlight
 
 -- create a function to dissect it
 function gdl90_proto.dissector(buffer,pinfo,tree)
@@ -450,7 +525,7 @@ function gdl90_proto.dissector(buffer,pinfo,tree)
   subtree:add(buffer(0,pktlen),"Stuffed Len: " .. pktlen)
   subtree:add(decodedBuffer(0,decodedLen),"Unstuffed Len: " .. decodedLen)
   subtree:add(decodedBuffer(0,1),string.format("Flag Byte: 0x%02x", decodedBuffer(0,1):uint()))
-  
+
   if (msgDissectFunctions[decodedBuffer(1,1):uint()] == nil) then
     dissectUnknown(decodedBuffer,pinfo,subtree)
   else
